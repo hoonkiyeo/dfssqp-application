@@ -16,7 +16,7 @@ and supports background execution and resumption.
 | `data/` | Data preparation; source inputs in `raw/`, prepared arrays in `processed/` |
 | `models/` | Single-index model and fixed-direction training/loss evaluation |
 | `algorithms/` | Optimization methods, with each complete iteration visible in its file |
-| `experiments/` | Run AI/ZI experiments and save independent evaluations |
+| `experiments/` | Run AI/ZI experiments, save evaluations and plot saved results |
 | `tests/` | Checks for implemented calculations and reproducibility |
 | `docs/` | Formulation, user-managed notes and [references](docs/references.md) |
 | `runs/` | Local experiment settings, results and checkpoints |
@@ -187,3 +187,21 @@ setting is reserved for later comparison work. No final-test data is loaded.
 
 Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs under
 `runs/` and local environments remain excluded.
+
+
+## Plot saved results
+
+```bash
+python -m experiments.plot --run runs/my_experiment
+```
+
+`experiments/plot.py` reads that experiment's `settings.json` and `summary.csv`.
+It saves separate `figures/mse.pdf` and `figures/feasibility.pdf`, with PNG copies.
+Colors, line width, font and figure size are collected at the top of the file.
+No training is run and the saved experiment results are unchanged.
+
+Lines show the run means and bands show ±1 SE across runs at the recorded evaluation
+checkpoints. Feasibility uses a logarithmic axis when positive values exist; zero
+values and nonpositive band bounds are omitted without an artificial floor. A single
+run is drawn without an SE band. Actual available run counts and these display
+conventions are saved in `figures/notes.txt`; partial results are explicitly identified.
