@@ -13,7 +13,7 @@ will be added next.
 | Location | Purpose |
 | --- | --- |
 | `config.py` | Data periods, algorithm parameters, training settings and seeds |
-| `data/` | Data preparation; local inputs in `raw/`, prepared arrays in `processed/` |
+| `data/` | Data preparation; source inputs in `raw/`, prepared arrays in `processed/` |
 | `models/` | Single-index model, training loss evaluation and fixed-direction baselines |
 | `algorithms/` | Optimization methods, with each complete iteration visible in its file |
 | `experiments/` | Run experiments, evaluate saved directions and plot results |
@@ -37,8 +37,9 @@ python -m pip install -r requirements.txt
 
 ## Prepare the data
 
-Place the two source ZIPs named in `config.py` under `data/raw/`. Their SHA-256
-hashes pin the frozen data vintage; a different download is rejected.
+The repository includes the two frozen source ZIPs under `data/raw/` and the
+prepared monthly arrays under `data/processed/`. The source ZIP hashes in `config.py`
+pin the data vintage. To rebuild the monthly arrays and run the data checks:
 
 ```bash
 python -m data.prepare
@@ -64,5 +65,6 @@ The command saves `training.npz`, `validation.npz` and `metadata.json` under
 the metadata records source hashes and benchmark weights. These arrays have not
 been standardized. The reserved test targets are not constructed.
 
-No optimization experiment command is available yet. Raw data, generated outputs
-and local environments are excluded from Git.
+No optimization experiment command is available yet. Raw ZIPs and prepared monthly
+data are tracked in Git. Experiment outputs under `runs/` and local environments
+remain excluded.

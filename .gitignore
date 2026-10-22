@@ -8,9 +8,7 @@ venv/
 .env
 .env.*
 
-# Local data and generated experiment outputs
-/data/raw/
-/data/processed/
+# Generated experiment outputs
 /runs/
 
 # Editor and operating-system files
