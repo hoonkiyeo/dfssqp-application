@@ -1,0 +1,6 @@
+# Python 3.11. Versions from the local reference environment (2026-10-22).
+numpy==2.4.6
+pandas==3.0.5
+torch==2.13.0
+matplotlib==3.11.1
+pytest==9.1.1

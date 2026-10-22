@@ -1,0 +1,20 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+
+# Local data and generated experiment outputs
+/data/raw/
+/data/processed/
+/runs/
+
+# Editor and operating-system files
+.DS_Store
+*.swp
+*.tmp
+.ipynb_checkpoints/
