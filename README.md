@@ -4,8 +4,8 @@ Application of derivative-free stochastic SQP to a constrained single-index
 learning problem. A unit-norm direction compresses industry information; a neural
 model is trained at each fixed direction to evaluate its validation loss.
 
-Data preparation and the fixed-direction training objective are implemented and
-verified against the original calculations. Outer optimization will be added next.
+Data preparation, the fixed-direction training objective and one complete AI/ZI
+DF-SSQP iteration are implemented and verified against the original calculations.
 
 ## Where to look
 
@@ -84,6 +84,42 @@ call `evaluate(w, seed, training, validation)`. It returns a scalar loss. Set
 parameters and scaling statistics. Parameters are in standardized coordinates.
 Set `torch.set_num_threads(config.torch_threads)` once in the calling script.
 
-No outer optimization experiment command is available yet. Raw ZIPs and prepared
-monthly data are tracked in Git. Experiment outputs under `runs/` and local
-environments remain excluded.
+## DF-SSQP iteration
+
+`algorithms/df_ssqp.py` shows the complete first-order update in `step`: schedules,
+perturbed losses, derivative estimates and averages, Jacobian safeguard, the SQP
+system, merit/ratio parameters and the primal/dual update. `initialize()` creates
+the configured normalized Gaussian start and initial state.
+
+Using the training/validation dictionaries loaded above:
+
+```python
+from algorithms.df_ssqp import initialize, step
+from models.objective import evaluate
+import config
+
+
+def loss(w, seed):
+    return evaluate(w, seed, training, validation)
+
+
+state = initialize()
+state, trace = step(state, config.outer_seeds[0], "AI", loss)
+# Call again with the returned state for the next iteration; use "ZI" for estimation.
+```
+
+The state contains `k`, `w`, `lam`, `g_bar`, `G_bar`, `tau`, and `nu`. The trace
+contains the actual quantities computed at each stage, including clipping and
+numerical-zero diagnostics. Each step uses two fresh loss evaluations with the same
+training seed. Indexed sampling preserves the original perturbation/training seeds
+and allows continuation directly from the saved state.
+
+The iteration follows Na (2025), Algorithm 1, with the existing application choices:
+unit-norm constraint, identity Hessian, AI/ZI Jacobians, singular-value clipping and
+`psi=0`. A certified zero primal direction retains `nu` and completes the ordinary
+state update. The numerical checks are at the bottom of the same file; they use
+constraint/KKT roundoff bounds, without adding a tunable zero-step threshold.
+
+An experiment runner for multiple runs, saved results and reporting is still to be
+added. Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs
+under `runs/` and local environments remain excluded.
