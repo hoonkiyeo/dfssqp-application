@@ -4,8 +4,9 @@ Application of derivative-free stochastic SQP to a constrained single-index
 learning problem. A unit-norm direction compresses industry information; a neural
 model is trained at each fixed direction to evaluate its validation loss.
 
-Data preparation, the fixed-direction training objective and one complete AI/ZI
-DF-SSQP iteration are implemented and verified against the original calculations.
+Data preparation, the training objective and the AI/ZI DF-SSQP iteration are
+verified against the original calculations. The experiment runner saves progress
+and supports background execution and resumption.
 
 ## Where to look
 
@@ -13,9 +14,9 @@ DF-SSQP iteration are implemented and verified against the original calculations
 | --- | --- |
 | `config.py` | Data periods, algorithm parameters, training settings and seeds |
 | `data/` | Data preparation; source inputs in `raw/`, prepared arrays in `processed/` |
-| `models/` | Single-index model, training loss evaluation and fixed-direction baselines |
+| `models/` | Single-index model and fixed-direction training/loss evaluation |
 | `algorithms/` | Optimization methods, with each complete iteration visible in its file |
-| `experiments/` | Run experiments, evaluate saved directions and plot results |
+| `experiments/` | Run AI/ZI experiments and save independent evaluations |
 | `tests/` | Checks for implemented calculations and reproducibility |
 | `docs/` | Formulation, user-managed notes and [references](docs/references.md) |
 | `runs/` | Local experiment settings, results and checkpoints |
@@ -24,7 +25,8 @@ DF-SSQP iteration are implemented and verified against the original calculations
 
 Edit `config.py`. It starts from the agreed baseline with `iota1 = 1.0`.
 For a different step coefficient, change that value in the same file.
-The runner will save a copy of the settings with each experiment's results.
+Each new experiment saves its settings. Resuming uses that saved copy, so editing
+`config.py` for another experiment does not alter an existing one.
 
 ## Environment
 
@@ -120,6 +122,68 @@ unit-norm constraint, identity Hessian, AI/ZI Jacobians, singular-value clipping
 state update. The numerical checks are at the bottom of the same file; they use
 constraint/KKT roundoff bounds, without adding a tunable zero-step threshold.
 
-An experiment runner for multiple runs, saved results and reporting is still to be
-added. Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs
-under `runs/` and local environments remain excluded.
+## Run an experiment
+
+Edit the parameters, `modes`, `outer_seeds`, `sqp_steps`, `evaluation_steps` and
+`evaluation_seeds` in `config.py`, then run from the repository root:
+
+```bash
+python -m experiments.run --background
+```
+
+The command prints the new folder under `runs/`. Omit `--background` to run in the
+terminal, or add `--output runs/my_experiment` to choose a new folder name.
+Existing folders are never overwritten. AI/ZI runs execute sequentially;
+background execution continues after the terminal closes.
+
+Using the printed folder in place of `runs/my_experiment`:
+
+```bash
+python -m experiments.run --status runs/my_experiment
+python -m experiments.run --pause runs/my_experiment
+python -m experiments.run --resume runs/my_experiment --background
+```
+
+Pause finishes the current SQP iteration or independent evaluation fit before
+stopping. Ctrl+C and SIGTERM do the same. After a forced shutdown, resume reuses
+saved fits and starts an unfinished fit again with the same seed. Such interrupted
+attempts are recorded separately because their unrecorded computation time is
+unknown. A pause request left by a crash is honored once on restart; resume again
+after the status becomes `paused`. `--status` also detects an inactive process.
+
+For a short check, use a separate configuration with fewer steps/seeds. Set
+`evaluation_steps` to an increasing list including zero and the final step.
+`--stop-after 2` pauses after two new SQP steps in that invocation; it does not
+change the experiment's saved budget. No power or sleep settings are changed.
+
+### What is saved
+
+| File | Contents |
+| --- | --- |
+| `settings.json` | Frozen configuration, code/data hashes, runtime versions and Git revision |
+| `summary.csv` | Mean MSE and feasibility, with SE across available runs at each checkpoint; `runs` gives the actual count |
+| `AI_<seed>/history.csv` (and `ZI_<seed>/`) | Feasibility, schedules, actual step, update norm, Jacobian singular value, clipping/zero-step diagnostics |
+| Each run's `evaluations.csv` | Mean MSE over the reporting seeds at each saved direction; incomplete panels are marked |
+| Each run's `history.jsonl` | Full state after every iteration, including w, multiplier and moving averages; this is the resume checkpoint |
+| Each run's `fits.jsonl` and `costs.json` | Per-fit seeds, losses and recorded fit times; optimizer/reporting costs and failed/interrupted attempts kept separate |
+| `status.json`, `run.log` | Current progress and background output |
+
+Each history row's `k` is the number of completed steps; its step diagnostics
+refer to the update that produced that state. CSV files are convenient views of
+the durable journals. The full state and loss records remain the authoritative
+results even if a process stops during a CSV export.
+
+Every optimizer step uses two loss evaluations. Reporting uses
+`len(evaluation_seeds)` fresh fits at every configured checkpoint, including k=0;
+these additional fits do not update or select w. Reporting seeds are below
+2**32 and optimizer training seeds are above it. Modes share the configured initial
+state and indexed random streams. Summary SE is across run means, not across the
+reporting seeds; only complete reporting panels enter that summary.
+
+Resume requires the same numerical source, prepared data and runtime. A changed
+`config.py` is allowed because its saved values are restored. Concurrent writers
+are rejected. This runner currently executes DF-SSQP AI/ZI only; the `baselines`
+setting is reserved for later comparison work. No final-test data is loaded.
+
+Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs under
+`runs/` and local environments remain excluded.
