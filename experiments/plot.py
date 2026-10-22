@@ -1,10 +1,11 @@
-"""Plot saved AI/ZI summaries; no training or optimization is run.
+"""Plot saved AI/ZI curves and optional fixed baselines; no model fitting is run.
 
 python -m experiments.plot --run runs/<experiment>
 """
 
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 
@@ -17,6 +18,9 @@ import matplotlib.pyplot as plt  # Select the headless backend before pyplot.
 
 # Existing document style. Change presentation here, not the saved experiment.
 COLORS = {'AI': '#166287', 'ZI': '#b85424'}
+BASELINES = {'aggregate_only': ('Aggregate-only', '#35836E', '--'),
+             'mean': ('Mean', '#8A7098', ':'),
+             'pca': ('PCA', '#A8853C', '-.')}
 FIGURE_SIZE = (7.5, 4.3)
 LINE_WIDTH = 2.0
 BAND_ALPHA = 0.32
@@ -55,8 +59,50 @@ def load_results(folder):
     return settings, curves
 
 
-def draw_metric(curves, metric):
+def load_baselines(folder, settings):
+    """Read baseline summaries without treating incomplete seed panels as final results."""
+    path = folder / 'baselines' / 'summary.csv'
+    if not path.exists():
+        return {}
+    manifest_path = folder / 'baselines' / 'settings.json'
+    if not manifest_path.exists():
+        raise ValueError('Baseline settings are missing; cannot confirm the comparison belongs to this experiment.')
+    manifest = json.loads(manifest_path.read_text())
+    parent_hash = hashlib.sha256((folder / 'settings.json').read_bytes()).hexdigest()
+    if manifest.get('parent_settings_sha256') != parent_hash:
+        raise ValueError('Baseline settings do not match this experiment.')
+    baselines = {}
+    expected_fits = len(settings['evaluation_seeds'])
+    with path.open(newline='') as file:
+        for row in csv.DictReader(file):
+            name = row['model']
+            if name not in BASELINES or name not in settings.get('baselines', BASELINES) or name in baselines:
+                raise ValueError(f'Unknown, unconfigured or duplicate baseline: {name}.')
+            if row['panel_complete'] not in ('True', 'False'):
+                raise ValueError(f'Invalid completion flag for baseline {name}.')
+            complete = row['panel_complete'] == 'True'
+            n = int(row['evaluation_fits'])
+            mean = float(row['mean_mse']) if row['mean_mse'] else np.nan
+            se = float(row['se_mse']) if row['se_mse'] else np.nan
+            if name == 'aggregate_only':
+                valid = n == 0 and not row['se_mse']
+            else:
+                valid = (0 <= n <= expected_fits and (not complete or n == expected_fits)
+                         and (n <= 1 or np.isfinite(se)))
+            needs_mean = complete or n > 0
+            if (not valid or (needs_mean and (not np.isfinite(mean) or mean < 0))
+                    or (row['mean_mse'] and (not np.isfinite(mean) or mean < 0))
+                    or (row['se_mse'] and (not np.isfinite(se) or se < 0))):
+                raise ValueError(f'Invalid statistics or evaluation count for baseline {name}.')
+            baselines[name] = {'evaluation_fits': n, 'mean_mse': mean,
+                               'se_mse': se, 'panel_complete': complete}
+    return baselines
+
+
+def draw_metric(curves, metric, baselines=None):
     """One mean curve and ±1 SE band per mode; keep the saved checkpoint coordinates."""
+    has_baselines = metric == 'mse' and any(
+        row['panel_complete'] for row in (baselines or {}).values())
     log_scale = metric == 'feasibility' and any(
         np.any(curve['mean_feasibility'] > 0) for curve in curves.values())
     with plt.rc_context(STYLE):
@@ -78,6 +124,12 @@ def draw_metric(curves, metric):
                                 linewidth=0, zorder=2)
             ax.plot(x, line, color=COLORS[mode], lw=LINE_WIDTH, label=f'DF-SSQP {mode}',
                     marker='o' if np.count_nonzero(np.isfinite(line)) == 1 else None, markersize=3, clip_on=False, zorder=3)
+        if metric == 'mse':
+            for name, (label, color, style) in BASELINES.items():
+                baseline = (baselines or {}).get(name)
+                if baseline and baseline['panel_complete']:
+                    ax.axhline(baseline['mean_mse'], color=color, ls=style,
+                               lw=1.6, label=label, zorder=2)
         ax.spines[['top', 'right']].set_visible(False)
         ax.spines[['left', 'bottom']].set_color('#B7BEC5')
         ax.tick_params(colors='#35414C', length=3)
@@ -92,17 +144,20 @@ def draw_metric(curves, metric):
             ax.set_yscale('log')
         else:
             ax.set_ylim(bottom=max(0, ax.get_ylim()[0]))
-        ax.legend(loc='best' if metric == 'feasibility' else 'upper right', frameon=False, fontsize=9.5,
+        ax.legend(loc='center right' if has_baselines else ('best' if metric == 'feasibility' else 'upper right'),
+                  frameon=has_baselines, facecolor='white', edgecolor='none', framealpha=1,
+                  fontsize=9.5,
                   handlelength=3.1, labelspacing=.55, borderaxespad=.4)
     return fig, ax
 
 
 def plot(folder):
     settings, curves = load_results(folder)
+    baselines = load_baselines(folder, settings)
     output = folder / 'figures'
     output.mkdir(exist_ok=True)
     for metric in ('mse', 'feasibility'):
-        fig, _ = draw_metric(curves, metric)
+        fig, _ = draw_metric(curves, metric, baselines)
         try:
             with plt.rc_context(STYLE):
                 fig.savefig(output / f'{metric}.pdf')
@@ -111,7 +166,7 @@ def plot(folder):
             plt.close(fig)
 
     # Keep figure legends simple; statistical details and actual counts live here.
-    notes = ['Lines: mean across stochastic runs; shading: +/-1 SE across run means.',
+    notes = ['DF-SSQP lines: mean across stochastic runs; shading: +/-1 SE across run means.',
              'Curves connect saved evaluation checkpoints; no smoothing is applied.',
              'MSE per run is averaged over the independent reporting seeds.',
              'One run has no estimable across-run SE and is drawn without a band.',
@@ -130,6 +185,20 @@ def plot(folder):
         notes.append(f"{mode}: {n}/{len(settings['outer_seeds'])} runs per checkpoint; "
                      f"through step {curve['k'][-1]}/{settings['sqp_steps']}; "
                      f"{'all configured panels present' if complete else 'partial results'}.")
+    if baselines:
+        notes.extend(['Baseline lines appear only in the MSE figure, without uncertainty bands.',
+                      'Mean/PCA lines average over independent reporting seeds; Aggregate-only is deterministic OLS.'])
+        for name in settings.get('baselines', BASELINES):
+            label = BASELINES[name][0]
+            baseline = baselines.get(name)
+            if baseline is None:
+                notes.append(f'{label}: no saved baseline result; omitted.')
+            elif not baseline['panel_complete']:
+                notes.append(f"{label}: incomplete evaluation panel ({baseline['evaluation_fits']} fits); omitted.")
+            elif name == 'aggregate_only':
+                notes.append(f'{label}: one deterministic fit; plotted.')
+            else:
+                notes.append(f"{label}: {baseline['evaluation_fits']}/{len(settings['evaluation_seeds'])} evaluation fits; plotted.")
     (output / 'notes.txt').write_text('\n'.join(notes) + '\n')
     print('\n'.join(notes))
     print(f'Figures: {output}')

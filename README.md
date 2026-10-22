@@ -182,12 +182,49 @@ reporting seeds; only complete reporting panels enter that summary.
 
 Resume requires the same numerical source, prepared data and runtime. A changed
 `config.py` is allowed because its saved values are restored. Concurrent writers
-are rejected. This runner currently executes DF-SSQP AI/ZI only; the `baselines`
-setting is reserved for later comparison work. No final-test data is loaded.
+are rejected. This runner executes DF-SSQP AI/ZI; fixed comparisons have the separate
+command below. No final-test data is loaded.
 
 Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs under
 `runs/` and local environments remain excluded.
 
+
+## Fixed comparison models
+
+`models/baselines.py` shows the complete calculations:
+
+| Model | Calculation |
+| --- | --- |
+| Aggregate-only | Fit `a + beta*u` by ordinary least squares on training months |
+| Mean | Equal unit-norm weights, `ones(d)/sqrt(d)` |
+| PCA | First right singular vector of training-column-centered `z`; no industry-wise rescaling |
+
+The PCA sign is fixed so its largest absolute loading is positive, matching the
+original implementation. Mean/PCA call the same `models/objective.py` as DF-SSQP:
+same neural model, Adam budget, training-only scaling and validation MSE units.
+
+To evaluate these comparisons for an existing experiment:
+
+```bash
+python -m experiments.baselines --run runs/my_experiment
+python -m experiments.plot --run runs/my_experiment
+```
+
+The baseline command restores that experiment's saved `baselines` selection and
+`evaluation_seeds`, regardless of later edits to `config.py`. With the default
+20 seeds, Mean and PCA require 20 fresh fits each; Aggregate-only is a deterministic
+OLS fit. Fixed models are evaluated once per seed, not once per SQP step or outer
+run. DF-SSQP is not rerun and its saved histories/summaries are unchanged.
+
+Results live in `runs/my_experiment/baselines/`: `directions.json`,
+`aggregate_only.json` (coefficients and predictions), `evaluations.csv` (neural
+seed/MSE pairs), `summary.csv`, plus settings and per-fit resumption/cost records.
+The reported neural SE is across evaluation seeds, distinct from DF-SSQP's
+across-run SE. The figure uses baseline means as horizontal lines without bands.
+
+Ctrl+C or SIGTERM stops after the current fit. Repeat the same command to continue;
+completed fits are reused. Resume checks the original model/data/runtime and the
+baseline implementation. Incomplete baseline panels are excluded from the figure.
 
 ## Plot saved results
 
@@ -196,7 +233,8 @@ python -m experiments.plot --run runs/my_experiment
 ```
 
 `experiments/plot.py` reads that experiment's `settings.json` and `summary.csv`.
-It saves separate `figures/mse.pdf` and `figures/feasibility.pdf`, with PNG copies.
+When available, completed fixed comparisons are read from `baselines/summary.csv`
+and added to MSE only. It saves separate `figures/mse.pdf` and `figures/feasibility.pdf`, with PNG copies.
 Colors, line width, font and figure size are collected at the top of the file.
 No training is run and the saved experiment results are unchanged.
 
