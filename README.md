@@ -30,7 +30,16 @@ Each new experiment saves its settings. Resuming uses that saved copy, so editin
 
 ## Environment
 
-Use Python 3.11 and install the dependencies:
+From the repository root, create and activate the Conda environment:
+
+```bash
+conda env create -f environment.yml
+conda activate dfssqp-application
+```
+
+`environment.yml` selects Python 3.11 and installs the packages listed in
+`requirements.txt`, which is the single source for package versions.
+If you already have a Python 3.11 environment, activate it and install directly:
 
 ```bash
 python -m pip install -r requirements.txt
