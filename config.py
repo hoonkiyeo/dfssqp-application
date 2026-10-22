@@ -11,6 +11,8 @@ from math import sqrt
 dimension = 48
 returns_file = "data/raw/48_Industry_Portfolios_daily_TXT.zip"
 calendar_file = "data/raw/F-F_Research_Data_Factors_daily_TXT.zip"
+returns_sha256 = "86e86a29e4365c13974631972d509f8ed6406e47bddf6eb90453fe19b95fb7e1"
+calendar_sha256 = "2aea744a2d55a2d8fcccc8815aedef587fb16bdc13875c459f022963ca0a9992"
 data_vintage = "2026-09-10"
 portfolio_weighting = "value"
 benchmark_ddof = 1  # Sample SD for the training-fitted inverse-volatility benchmark.

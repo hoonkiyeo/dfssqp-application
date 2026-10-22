@@ -4,9 +4,9 @@ Application of derivative-free stochastic SQP to a constrained single-index
 learning problem. A unit-norm direction compresses industry information; a neural
 model is trained at each fixed direction to evaluate its validation loss.
 
-The implementation is being rebuilt in small, readable parts. The folder structure
-and settings are ready; data preparation, training and optimization are not yet
-implemented in this repository.
+The implementation is being rebuilt in small, readable parts. Data preparation is ready
+and verified against the original implementation. Model training and optimization
+will be added next.
 
 ## Where to look
 
@@ -35,5 +35,34 @@ Use Python 3.11 and install the dependencies:
 python -m pip install -r requirements.txt
 ```
 
-No experiment command is available yet. Data, generated outputs and local
-environments are excluded from Git; data preparation code and documents are tracked.
+## Prepare the data
+
+Place the two source ZIPs named in `config.py` under `data/raw/`. Their SHA-256
+hashes pin the frozen data vintage; a different download is rejected.
+
+```bash
+python -m data.prepare
+python -m pytest tests/test_prepare.py -q
+```
+
+`data/prepare.py` shows the calculation in order:
+
+1. Read daily industry returns and convert percentages to decimals. The separate
+   factor file checks dates only; its market returns are not used.
+2. Fit inverse-volatility benchmark weights using training days only.
+3. Form daily benchmark returns, then sum squared daily returns within each month.
+4. Take logs and pair the current month with the next month, within each split.
+
+| Array | Meaning | Training | Validation |
+| --- | --- | --- | --- |
+| `z` | Current-month log realized variances of the 48 industries | 410 × 48 | 136 × 48 |
+| `u` | Current-month benchmark log realized variance | 410 | 136 |
+| `y` | Next-month benchmark log realized variance | 410 | 136 |
+
+The command saves `training.npz`, `validation.npz` and `metadata.json` under
+`data/processed/`. Each array file also contains month labels and industry names;
+the metadata records source hashes and benchmark weights. These arrays have not
+been standardized. The reserved test targets are not constructed.
+
+No optimization experiment command is available yet. Raw data, generated outputs
+and local environments are excluded from Git.
