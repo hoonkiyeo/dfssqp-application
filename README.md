@@ -4,9 +4,8 @@ Application of derivative-free stochastic SQP to a constrained single-index
 learning problem. A unit-norm direction compresses industry information; a neural
 model is trained at each fixed direction to evaluate its validation loss.
 
-The implementation is being rebuilt in small, readable parts. Data preparation is ready
-and verified against the original implementation. Model training and optimization
-will be added next.
+Data preparation and the fixed-direction training objective are implemented and
+verified against the original calculations. Outer optimization will be added next.
 
 ## Where to look
 
@@ -65,6 +64,26 @@ The command saves `training.npz`, `validation.npz` and `metadata.json` under
 the metadata records source hashes and benchmark weights. These arrays have not
 been standardized. The reserved test targets are not constructed.
 
-No optimization experiment command is available yet. Raw ZIPs and prepared monthly
-data are tracked in Git. Experiment outputs under `runs/` and local environments
-remain excluded.
+## Model and loss evaluation
+
+`models/single_index.py` defines beta*u + F_theta(index), with a 1-8-1 Softplus link.
+`models/objective.py` shows the full fit: compute the index, standardize from training
+only, initialize a fresh model, take 1,000 Adam steps, and compute validation MSE in
+original response units. Each seed fixes separate initialization and minibatch streams.
+
+Run one fit at the configured initial direction and first evaluation seed:
+
+```bash
+python -m models.objective
+python -m pytest tests -q
+```
+
+For repeated fits, load the prepared `z`, `u`, `y` arrays once into dictionaries and
+call `evaluate(w, seed, training, validation)`. It returns a scalar loss. Set
+`details=True` to also inspect predictions, initialization, minibatches, fitted
+parameters and scaling statistics. Parameters are in standardized coordinates.
+Set `torch.set_num_threads(config.torch_threads)` once in the calling script.
+
+No outer optimization experiment command is available yet. Raw ZIPs and prepared
+monthly data are tracked in Git. Experiment outputs under `runs/` and local
+environments remain excluded.
