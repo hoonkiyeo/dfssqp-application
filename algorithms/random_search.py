@@ -23,25 +23,17 @@ def step(state, outer_seed, eta, loss):
     the same outer_seed and k share the direction and training seed across eta.
     """
     k, w = state["k"], np.asarray(state["w"], dtype=np.float64)
-    if not isinstance(k, (int, np.integer)) or k < 0:
-        raise ValueError("k must be a nonnegative integer.")
-    if w.ndim != 1 or not len(w) or not np.isfinite(w).all():
-        raise ValueError("w must be a finite, nonempty vector.")
     if not np.isfinite(eta) or eta <= 0:
         raise ValueError("eta must be finite and positive.")
 
     # 1. A unit-sphere direction and an independent training seed.
     streams = np.random.SeedSequence([outer_seed, k, 20261023]).spawn(2)
     v = np.random.default_rng(streams[0]).normal(size=len(w))
-    norm = np.linalg.norm(v)
-    if not np.isfinite(norm) or norm == 0:
-        raise FloatingPointError("Cannot normalize the sampled direction.")
-    s = v / norm
+    s = v / np.linalg.norm(v)
     seed = int(np.random.default_rng(streams[1]).integers(2**32, np.iinfo(np.int64).max))
 
     # 2. Evaluate both raw candidates using the same training randomness.
     w_plus, w_minus = w + eta * s, w - eta * s
-    w_plus.flags.writeable = w_minus.flags.writeable = False
     L_plus, L_minus = float(loss(w_plus, seed)), float(loss(w_minus, seed))
     if not np.isfinite([L_plus, L_minus]).all():
         raise FloatingPointError("Both candidate losses must be finite.")
