@@ -16,7 +16,7 @@ and supports background execution and resumption.
 | `data/` | Data preparation; source inputs in `raw/`, prepared arrays in `processed/` |
 | `models/` | Single-index model and fixed-direction training/loss evaluation |
 | `algorithms/` | Optimization methods, with each complete iteration visible in its file |
-| `experiments/` | Run AI/ZI experiments, save evaluations and plot saved results |
+| `experiments/` | Run DF-SSQP and stochastic random search, save evaluations and plot results |
 | `tests/` | Checks for implemented calculations and reproducibility |
 | `docs/` | Formulation, user-managed notes and [references](docs/references.md) |
 | `runs/` | Local experiment settings, results and checkpoints |
@@ -196,6 +196,38 @@ command below. No final-test data is loaded.
 
 Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs under
 `runs/` and local environments remain excluded.
+
+
+## Stochastic random-search pilot
+
+`algorithms/random_search.py` contains the complete two-candidate iteration.
+`experiments/random_search.py` manages the eta comparison using the
+`random_search_*` settings at the bottom of `config.py`.
+
+The pilot compares fixed eta values 0.01, 0.1 and 1 over three paired stochastic
+runs of 5,000 iterations. Each iteration uses two fresh fits with a shared training
+seed. The same run/iteration shares its direction and training seed across eta.
+The separate 20-seed pilot evaluation panel selects eta by final mean MSE.
+
+```bash
+python -m experiments.random_search --background
+python -m experiments.random_search --status runs/my_experiment
+python -m experiments.random_search --pause runs/my_experiment
+python -m experiments.random_search --resume runs/my_experiment --background
+```
+
+Use the actual folder printed at launch in place of `runs/my_experiment`.
+The runner freezes settings and supports the same saved-fit recovery as DF-SSQP.
+`--stop-after N` pauses after N new iterations across the whole invocation.
+
+`initial/` stores the common starting-point evaluation once. Each
+`eta_<value>/run_<seed>/` stores state history, fits and evaluated checkpoints.
+The root contains `budget.json`, `costs.json`, `summary.csv` (mean and SE across
+actual completed runs), and `selection.json`; the latter selects eta only after
+all final panels finish. The full pilot requires 90,000 optimization fits and
+1,280 evaluation fits. Recorded fit times and failed/interrupted attempts are
+reported separately. This pilot panel is separate from the production evaluation
+seeds. Reserved test data is not loaded.
 
 
 ## Fixed comparison models
