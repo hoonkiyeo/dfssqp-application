@@ -1,4 +1,5 @@
-"""MiSTP: Boucherouite et al. (AAAI 2024), Algorithm 1.
+"""
+MiSTP: Boucherouite et al. (AAAI 2024), Algorithm 1.
 
 https://doi.org/10.1609/aaai.v38i18.30016
 Application: one shared training seed for three fresh fits; project the selected
@@ -11,13 +12,19 @@ import config
 
 
 def initialize():
-    """The same fixed unit-norm initial direction as DF-SSQP."""
+    """
+    The same fixed unit-norm initial direction as DF-SSQP.
+    """
+
     v = np.random.default_rng(config.initialization_seed).normal(size=config.dimension)
     return {"k": 0, "w": v / np.linalg.norm(v)}
 
 
 def step(state, outer_seed, alpha, loss):
-    """One projected MiSTP iteration -> (next_state, trace)."""
+    """
+    One projected MiSTP iteration -> (next_state, trace).
+    """
+
     k, w = state["k"], np.asarray(state["w"], dtype=np.float64)
     if not np.isfinite(alpha) or alpha <= 0:
         raise ValueError("alpha must be finite and positive.")
