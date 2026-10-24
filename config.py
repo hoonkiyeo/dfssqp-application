@@ -94,12 +94,12 @@ experiment_name = "baseline"
 runs_directory = "runs"
 
 
-# Stochastic random-search pilot: fixed eta, three paired stochastic runs.
-random_search_etas = (0.01, 0.1, 1.0)
+# Stochastic random search: fixed eta baseline, ten fresh stochastic runs.
+random_search_etas = (0.1,)
 random_search_steps = 5_000
-random_search_run_seeds = [66_100_901, 66_100_902, 66_100_903]
-# Same direction and training seed across eta for each run/iteration.
-random_search_evaluation_seeds = list(range(76_100_901, 76_100_921))
-# Separate from optimizer training seeds and the production evaluation panel above.
-random_search_evaluation_steps = [0, 100, 500, 1000, 2000, 3000, 4000, 5000]
-random_search_experiment_name = "random_search_eta_pilot"
+random_search_run_seeds = list(range(86_100_901, 86_100_911))
+# Same reporting panel/checkpoints as DF-SSQP; these seeds never select eta or w.
+# The completed pilot used outer seeds 66_100_901..903 and panel 76_100_901..920.
+random_search_evaluation_seeds = list(evaluation_seeds)
+random_search_evaluation_steps = list(evaluation_steps)
+random_search_experiment_name = "random_search_eta_0p1_main"

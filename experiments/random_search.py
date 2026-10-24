@@ -1,4 +1,4 @@
-"""Run the stochastic random-search eta pilot configured in config.py.
+"""Run a fixed-eta random-search experiment or eta comparison from config.py.
 
 python -m experiments.random_search --background
 python -m experiments.random_search --pause runs/<experiment>
@@ -36,8 +36,10 @@ def validate_settings():
         if not seeds or len(set(seeds)) != len(seeds) or any(type(s) is not int or s < 0 for s in seeds):
             raise ValueError(f'{name} must contain distinct nonnegative integers.')
     panel = config.random_search_evaluation_seeds
-    if any(s >= 2**32 for s in panel) or set(panel) & set(config.evaluation_seeds):
-        raise ValueError('Pilot evaluation seeds must be below 2**32 and separate from the production panel.')
+    if any(s >= 2**32 for s in panel):
+        raise ValueError('Evaluation seeds must be below 2**32; optimizer seeds are above it.')
+    if len(etas) > 1 and set(panel) & set(config.evaluation_seeds):
+        raise ValueError('Eta-comparison seeds must be separate from the production panel.')
     steps, points = config.random_search_steps, config.random_search_evaluation_steps
     if type(steps) is not int or steps < 1:
         raise ValueError('random_search_steps must be a positive integer.')
@@ -102,7 +104,7 @@ def export_run(folder, history, completed, initial_completed):
 
 
 def export_summary(folder):
-    """Report actual completed panels; select eta only when all final panels exist."""
+    """Report completed panels; select eta only for a completed multi-eta comparison."""
     rows, final = [], []
     for eta in config.random_search_etas:
         panels = {}
@@ -124,9 +126,15 @@ def export_summary(folder):
                 final.append(row)
     storage.write_csv(folder / 'summary.csv', rows)
     complete = len(final) == len(config.random_search_etas)
+    compare_etas = len(config.random_search_etas) > 1
     storage.save_json(folder / 'selection.json', {
-        'complete': complete, 'criterion': 'Mean final-checkpoint evaluation MSE across stochastic runs.',
-        'eta_with_lowest_mean': min(final, key=lambda row: row['mean_mse'])['eta'] if complete else None,
+        'mode': 'eta_comparison' if compare_etas else 'fixed_eta',
+        'complete': complete,
+        'criterion': ('Mean final-checkpoint evaluation MSE across stochastic runs.'
+                      if compare_etas else 'Eta is fixed; reporting results do not select it.'),
+        'fixed_eta': None if compare_etas else float(config.random_search_etas[0]),
+        'eta_with_lowest_mean': (min(final, key=lambda row: row['mean_mse'])['eta']
+                                 if complete and compare_etas else None),
         'final_results': final, 'note': 'Initial evaluation panel is shared once across all trajectories.'})
     costs = {role: {key: 0 for key in ('done', 'failed', 'interrupted', 'start')}
              for role in ('opt', 'eval')}

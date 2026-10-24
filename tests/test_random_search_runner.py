@@ -1,4 +1,4 @@
-"""Pilot runner checks: cheap deterministic losses, no training experiment."""
+"""Random-search runner checks: cheap deterministic losses, no training experiment."""
 import csv
 import fcntl
 import json
@@ -165,8 +165,10 @@ def test_interrupted_initial_probe_or_evaluation_reuses_done_fits(small, monkeyp
     assert sum(e['event'] == 'start' for e in events) == 93
 
 
-def test_reporting_panel_does_not_change_search(small, monkeypatch):
+@pytest.mark.parametrize('etas', [(0.01, 0.1, 1.0), (0.1,)])
+def test_reporting_panel_does_not_change_search(small, monkeypatch, etas):
     root, _, _ = small
+    monkeypatch.setattr(config, 'random_search_etas', etas)
     dense = runner.prepare(root / 'dense')
     runner.execute(dense)
     monkeypatch.setattr(config, 'random_search_evaluation_steps', [0, 3])
@@ -262,3 +264,40 @@ def test_pause_request_during_initial_panel_reuses_result(small, monkeypatch):
     runner.execute(folder)
     assert len(calls) == 92
     assert json.loads((folder / 'status.json').read_text())['state'] == 'completed'
+
+
+def test_fixed_eta_production_panel_budget_and_resume(small, monkeypatch):
+    root, calls, _ = small
+    monkeypatch.setattr(config, 'random_search_etas', (0.1,))
+    monkeypatch.setattr(config, 'random_search_evaluation_seeds', list(config.evaluation_seeds))
+    continuous = runner.prepare(root / 'fixed_continuous')
+    assert not calls
+    runner.execute(continuous)
+    expected = scientific_results(continuous)
+    # 3 runs * 3 steps * 2 fits + 2 initial fits + 3 runs * 2 checkpoints * 2 fits.
+    assert len(calls) == 32
+    assert json.loads((continuous / 'budget.json').read_text()) == {
+        'optimization_fits': 18, 'evaluation_fits': 14, 'total_fits': 32}
+    selection = json.loads((continuous / 'selection.json').read_text())
+    assert selection['mode'] == 'fixed_eta' and selection['complete']
+    assert selection['fixed_eta'] == 0.1 and selection['eta_with_lowest_mean'] is None
+    assert len(selection['final_results']) == 1
+    assert selection['final_results'][0]['runs'] == 3
+    assert all(seed >= 2**32 or seed in config.evaluation_seeds for _, seed in calls)
+
+    paused = runner.prepare(root / 'fixed_paused')
+    runner.execute(paused, stop_after=1)
+    selection = json.loads((paused / 'selection.json').read_text())
+    assert selection['mode'] == 'fixed_eta' and not selection['complete']
+    assert selection['fixed_eta'] == 0.1 and selection['eta_with_lowest_mean'] is None
+    # Saved fixed-eta settings must win over a later multi-eta configuration.
+    monkeypatch.setattr(config, 'random_search_etas', (9.0, 99.0))
+    monkeypatch.setattr(config, 'random_search_steps', 99)
+    monkeypatch.setattr(config, 'random_search_evaluation_seeds', [999])
+    runner.execute(paused)
+    assert scientific_results(paused) == expected
+    assert (paused / 'summary.csv').read_text() == (continuous / 'summary.csv').read_text()
+    assert (paused / 'selection.json').read_text() == (continuous / 'selection.json').read_text()
+    assert len(calls) == 64
+    runner.execute(paused)
+    assert len(calls) == 64

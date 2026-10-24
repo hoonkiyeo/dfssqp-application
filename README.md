@@ -198,16 +198,15 @@ Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs under
 `runs/` and local environments remain excluded.
 
 
-## Stochastic random-search pilot
+## Stochastic random search
 
 `algorithms/random_search.py` contains the complete two-candidate iteration.
-`experiments/random_search.py` manages the eta comparison using the
-`random_search_*` settings at the bottom of `config.py`.
+`experiments/random_search.py` uses the `random_search_*` settings in `config.py`.
 
-The pilot compares fixed eta values 0.01, 0.1 and 1 over three paired stochastic
-runs of 5,000 iterations. Each iteration uses two fresh fits with a shared training
-seed. The same run/iteration shares its direction and training seed across eta.
-The separate 20-seed pilot evaluation panel selects eta by final mean MSE.
+The current main baseline fixes eta=0.1 for 10 fresh stochastic runs of 5,000
+iterations, from the same initial direction as DF-SSQP. Each iteration uses two
+fresh fits with a shared training seed. The 20 reporting seeds and 19 checkpoints
+match DF-SSQP; reporting does not select eta or change the search direction.
 
 ```bash
 python -m experiments.random_search --background
@@ -223,11 +222,17 @@ The runner freezes settings and supports the same saved-fit recovery as DF-SSQP.
 `initial/` stores the common starting-point evaluation once. Each
 `eta_<value>/run_<seed>/` stores state history, fits and evaluated checkpoints.
 The root contains `budget.json`, `costs.json`, `summary.csv` (mean and SE across
-actual completed runs), and `selection.json`; the latter selects eta only after
-all final panels finish. The full pilot requires 90,000 optimization fits and
-1,280 evaluation fits. Recorded fit times and failed/interrupted attempts are
-reported separately. This pilot panel is separate from the production evaluation
-seeds. Reserved test data is not loaded.
+actual completed runs), and `selection.json`. With one eta, the latter records
+`fixed_eta` and performs no selection. The main budget is 100,000 optimization
+fits plus 3,620 reporting fits. Failed/interrupted attempts are reported separately.
+Reserved test data is not loaded.
+
+Multiple configured eta values instead run a paired eta comparison; that
+comparison must use an evaluation panel separate from the production panel.
+Only then does `selection.json` select the lowest final mean after all final
+panels finish. The completed three-eta pilot remains in its original run folder;
+its reporting panel and trajectories are not reused as main-experiment runs.
+Saved runs require their original source/data/runtime fingerprints for resumption.
 
 
 ## Fixed comparison models
