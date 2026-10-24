@@ -66,7 +66,7 @@ def test_three_fresh_evaluations_selection_and_ties(losses, selected, index):
 def test_indexed_streams_match_the_agreed_seed_map():
     state = initialize()
     outer_seed = 71
-    streams = np.random.SeedSequence([outer_seed, 0, 20261023]).spawn(2)
+    streams = np.random.SeedSequence([outer_seed, 0, 20260910]).spawn(2)
     gaussian = np.random.default_rng(streams[0]).normal(size=len(state["w"]))
     expected_direction = gaussian / np.linalg.norm(gaussian)
     expected_seed = int(
@@ -140,7 +140,7 @@ def test_multiple_updates_match_a_direct_mathematical_reference(alpha):
         return float((w - target) @ (w - target)) + float(seed % 97) / 1000
 
     for k in range(12):
-        streams = np.random.SeedSequence([71, k, 20261023]).spawn(2)
+        streams = np.random.SeedSequence([71, k, 20260910]).spawn(2)
         gaussian = np.random.default_rng(streams[0]).normal(size=len(target))
         direction = gaussian / np.linalg.norm(gaussian)
         seed = int(np.random.default_rng(streams[1]).integers(2**32, np.iinfo(np.int64).max))

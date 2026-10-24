@@ -95,7 +95,7 @@ runs_directory = "runs"
 
 
 # MiSTP: current/+/- selection, one shared training seed, then unit-sphere projection.
-# Agreed step-size candidates; set the pilot protocol before running.
+# Standalone MiSTP defaults; the shared pilot below supplies its frozen protocol.
 mistp_alphas = (1.0, 0.1, 0.01)
 mistp_steps = None
 mistp_run_seeds = []
@@ -113,3 +113,18 @@ zo_rsgd_run_seeds = list(outer_seeds)
 zo_rsgd_evaluation_seeds = list(evaluation_seeds)
 zo_rsgd_evaluation_steps = list(evaluation_steps)
 zo_rsgd_experiment_name = "zo_rsgd_baseline"
+
+
+# Step-scale pilot: preparation only via `python -m experiments.pilot`.
+# All methods use 5,000 steps; MiSTP costs 3 fits/step, the others 2.
+# Three fresh run streams, paired across methods/candidates at each run,k.
+pilot_steps = 5_000
+pilot_run_seeds = [66_102_401, 66_102_402, 66_102_403]
+pilot_evaluation_seeds = list(range(47_102_401, 47_102_421))
+pilot_evaluation_steps = [0, 100, 500, 1000, 2000, 3500, 5000]
+pilot_df_iota1s = (1.0, 10.0, 100.0)
+pilot_zo_coefficients = (0.01, 0.1, 1.0)  # eta = c / sqrt(pilot_steps); mu stays 0.01.
+pilot_mistp_alphas = (1.0, 0.1, 0.01)
+pilot_experiment_name = "step_scale_pilot"
+# Pilot reporting selects coefficients after the pilot, never its iterates.
+# This panel is separate from the existing main panel `evaluation_seeds`.

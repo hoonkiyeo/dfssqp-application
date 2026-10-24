@@ -29,8 +29,8 @@ def step(state, outer_seed, alpha, loss):
     if not np.isfinite(alpha) or alpha <= 0:
         raise ValueError("alpha must be finite and positive.")
 
-    # 1. Draw a unit direction and a training seed, shared across alpha choices.
-    streams = np.random.SeedSequence([outer_seed, k, 20261023]).spawn(2)
+    # 1. Draw a unit direction and training seed; use the DF/ZO indexed streams.
+    streams = np.random.SeedSequence([outer_seed, k, 20260910]).spawn(2)
     u = np.random.default_rng(streams[0]).normal(size=len(w))
     s = u / np.linalg.norm(u)
     seed = int(np.random.default_rng(streams[1]).integers(2**32, np.iinfo(np.int64).max))

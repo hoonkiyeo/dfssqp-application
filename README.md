@@ -208,11 +208,12 @@ It selects the lowest loss (ties: current, positive, negative), then normalizes
 that point for the next iteration. The starting direction matches DF-SSQP.
 
 `experiments/mistp.py` reads the `mistp_*` settings in `config.py`. The agreed
-constant-step candidates are `(1.0, 0.1, 0.01)`. The pilot's steps, run seeds,
-reporting seeds and checkpoints are deliberately unset until its design is fixed.
-The runner rejects incomplete settings before starting any model fits.
+constant-step candidates are `(1.0, 0.1, 0.01)`. The standalone runner requires its
+`mistp_*` steps, run seeds, reporting seeds and checkpoints to be set. For the
+agreed shared pilot, use the preparation command below; it fills and freezes these
+values without changing the standalone defaults.
 
-Once those settings are filled in:
+For a separately configured MiSTP experiment:
 
 ```bash
 python -m experiments.mistp --background
@@ -322,3 +323,46 @@ reporting means and SE across runs. Resume restores the saved horizon and
 constant step size; it reuses completed fits after an interruption.
 The plotting script currently handles DF-SSQP results; ZO-RSGD reporting curves
 are saved in its experiment's `summary.csv`.
+
+
+## Prepare the step-scale pilot
+
+The `pilot_*` block in `config.py` defines the shared pilot:
+
+| Method | Step coefficient candidates | Steps | Runs per candidate | Optimization fits per candidate/run |
+| --- | --- | ---: | ---: | ---: |
+| DF-SSQP AI and ZI, separately | iota1: 1, 10, 100 | 5,000 | 3 | 10,000 |
+| ZO-RSGD | c: 0.01, 0.1, 1; eta = c/sqrt(5000) | 5,000 | 3 | 10,000 |
+| Projected MiSTP | alpha: 1, 0.1, 0.01 | 5,000 | 3 | 15,000 |
+
+```bash
+python -m experiments.pilot --output runs/step_scale_pilot
+```
+
+**This command only prepares settings. It does not train models or start workers.**
+It reuses the existing runners, freezes separate coefficient campaigns, and saves
+launch commands in `protocol.json`. Each campaign retains that runner's background,
+pause/resume and completed-fit recovery. Existing experiments are not overwritten.
+
+All trajectories share the fixed initial direction, three fresh indexed run streams,
+and a common 20-seed pilot reporting panel distinct from the existing main panel.
+The training seed at a common run/iteration matches across methods; two or three
+candidate fits share it. Direction distributions remain method-specific. Reporting
+at steps 0, 100, 500, 1000, 2000, 3500 and 5000 never updates the iterates, but its
+final mean is used to screen coefficients.
+
+There are 405,000 planned optimization fits and 4,760 reporting fits. This is a
+**fixed-step pilot with unequal fit budgets**, because MiSTP evaluates three points
+per step. Reporting follows each existing runner's initialization-cache policy;
+failed/interrupted attempts would be additional work.
+
+After results exist, consolidate the saved evaluations without training:
+
+```bash
+python -m experiments.pilot --report runs/step_scale_pilot
+```
+
+The summary computes MSE means and SE across run means, and feasibility means/SE.
+Final coefficient screening waits for every planned final panel. The lowest-MSE
+coefficient is provisional: inspect DF feasibility and variation across three runs
+before freezing a setting for fresh confirmation. No reserved-test data is used.
