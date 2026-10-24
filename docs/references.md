@@ -11,6 +11,22 @@
   Our application adds normalization of the selected candidate to enforce unit norm;
   exact loss ties select the positive candidate.
 
+- **Li, J., Balasubramanian, K., and Ma, S. (2023).**
+  [Stochastic Zeroth-Order Riemannian Derivative Estimation and
+  Optimization](https://doi.org/10.1287/moor.2022.1302).
+  *Mathematics of Operations Research*, 48(2), 1183–1211.
+  [arXiv:2003.11238v3](https://arxiv.org/abs/2003.11238v3).
+  Source for ZO-RSGD (Algorithm 2 in the linked arXiv version), using tangent
+  Gaussian gradient estimates and retraction updates.
+
+- **Li, J., Balasubramanian, K., and Ma, S. (2024).**
+  [Zeroth-Order Riemannian Averaging Stochastic Approximation
+  Algorithms](https://doi.org/10.1137/23M1605405).
+  *SIAM Journal on Optimization*, 34(4), 3314–3341.
+  [arXiv:2309.14506v1](https://arxiv.org/abs/2309.14506v1).
+  Reference for Zo-RASA, using Riemannian moving averages, retractions, and vector
+  transport. Section 5 also compares single-sample ZO-RSGD.
+
 - **Spall, J. C. (1992).** Multivariate Stochastic Approximation Using a Simultaneous
   Perturbation Gradient Approximation. *IEEE Transactions on Automatic Control*,
   37, 332–341. [Author's reference list](https://www.jhuapl.edu/SPSA/Pages/References-List_Ref.htm).
