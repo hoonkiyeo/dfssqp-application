@@ -198,41 +198,46 @@ Raw ZIPs and prepared monthly data are tracked in Git. Experiment outputs under
 `runs/` and local environments remain excluded.
 
 
-## Stochastic random search
+## Minibatch Stochastic Three Points (MiSTP)
 
-`algorithms/random_search.py` contains the complete two-candidate iteration.
-`experiments/random_search.py` uses the `random_search_*` settings in `config.py`.
+`algorithms/mistp.py` contains the complete iteration from Boucherouite et al.
+(AAAI 2024, Algorithm 1), with unit-sphere projection added for this application.
+It draws one uniform unit direction and evaluates the current point and the two
+raw symmetric candidates using three fresh fits with the same training seed.
+It selects the lowest loss (ties: current, positive, negative), then normalizes
+that point for the next iteration. The starting direction matches DF-SSQP.
 
-The current main baseline fixes eta=0.1 for 10 fresh stochastic runs of 5,000
-iterations, from the same initial direction as DF-SSQP. Each iteration uses two
-fresh fits with a shared training seed. The 20 reporting seeds and 19 checkpoints
-match DF-SSQP; reporting does not select eta or change the search direction.
+`experiments/mistp.py` reads the `mistp_*` settings in `config.py`. The agreed
+constant-step candidates are `(1.0, 0.1, 0.01)`. The pilot's steps, run seeds,
+reporting seeds and checkpoints are deliberately unset until its design is fixed.
+The runner rejects incomplete settings before starting any model fits.
+
+Once those settings are filled in:
 
 ```bash
-python -m experiments.random_search --background
-python -m experiments.random_search --status runs/my_experiment
-python -m experiments.random_search --pause runs/my_experiment
-python -m experiments.random_search --resume runs/my_experiment --background
+python -m experiments.mistp --background
+python -m experiments.mistp --status runs/my_experiment
+python -m experiments.mistp --pause runs/my_experiment
+python -m experiments.mistp --resume runs/my_experiment --background
 ```
 
-Use the actual folder printed at launch in place of `runs/my_experiment`.
-The runner freezes settings and supports the same saved-fit recovery as DF-SSQP.
-`--stop-after N` pauses after N new iterations across the whole invocation.
+Use the actual printed folder in place of `runs/my_experiment`. The runner freezes
+settings and supports saved-fit recovery, including interruption between the three
+fits of one iteration. `--stop-after N` pauses after N new iterations in that invocation.
+Each iteration costs **three optimization fits**, including a fresh current-point fit.
+The inner Adam batch size 64 is separate from this single-sample outer evaluation.
 
-`initial/` stores the common starting-point evaluation once. Each
-`eta_<value>/run_<seed>/` stores state history, fits and evaluated checkpoints.
+`initial/` stores the common reporting panel once. Each
+`alpha_<value>/run_<seed>/` stores state history, fits and evaluated checkpoints.
 The root contains `budget.json`, `costs.json`, `summary.csv` (mean and SE across
-actual completed runs), and `selection.json`. With one eta, the latter records
-`fixed_eta` and performs no selection. The main budget is 100,000 optimization
-fits plus 3,620 reporting fits. Failed/interrupted attempts are reported separately.
-Reserved test data is not loaded.
+completed runs), and `selection.json`. Multiple alpha values use a separate pilot
+reporting panel and select the lowest final mean only after every final panel is
+complete. A fixed alpha performs no selection. Reporting does not change the search.
+Failed/interrupted attempts are charged separately. No reserved-test data is loaded.
 
-Multiple configured eta values instead run a paired eta comparison; that
-comparison must use an evaluation panel separate from the production panel.
-Only then does `selection.json` select the lowest final mean after all final
-panels finish. The completed three-eta pilot remains in its original run folder;
-its reporting panel and trajectories are not reused as main-experiment runs.
-Saved runs require their original source/data/runtime fingerprints for resumption.
+The earlier two-candidate random-search results remain in their original run folders;
+they are not MiSTP runs and are not resumed by this runner. Their source remains in
+Git history. No old results are overwritten or converted.
 
 
 ## Fixed comparison models

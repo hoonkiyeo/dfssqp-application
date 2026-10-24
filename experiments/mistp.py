@@ -1,8 +1,8 @@
-"""Run a fixed-eta random-search experiment or eta comparison from config.py.
+"""Run a projected MiSTP experiment or step-size comparison from config.py.
 
-python -m experiments.random_search --background
-python -m experiments.random_search --pause runs/<experiment>
-python -m experiments.random_search --resume runs/<experiment> --background
+python -m experiments.mistp --background
+python -m experiments.mistp --pause runs/<experiment>
+python -m experiments.mistp --resume runs/<experiment> --background
 """
 
 import argparse
@@ -21,36 +21,36 @@ import numpy as np
 import torch
 
 import config
-from algorithms.random_search import initialize, step
+from algorithms.mistp import initialize, step
 from experiments import run as storage  # Existing file I/O and saved-fit tools.
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def validate_settings():
-    etas = config.random_search_etas
-    if not etas or len(set(etas)) != len(etas) or any(not np.isfinite(a) or a <= 0 for a in etas):
-        raise ValueError('random_search_etas must be distinct, finite and positive.')
-    for name in ('random_search_run_seeds', 'random_search_evaluation_seeds'):
+    alphas = config.mistp_alphas
+    if not alphas or len(set(alphas)) != len(alphas) or any(not np.isfinite(a) or a <= 0 for a in alphas):
+        raise ValueError('mistp_alphas must be distinct, finite and positive.')
+    for name in ('mistp_run_seeds', 'mistp_evaluation_seeds'):
         seeds = getattr(config, name)
         if not seeds or len(set(seeds)) != len(seeds) or any(type(s) is not int or s < 0 for s in seeds):
             raise ValueError(f'{name} must contain distinct nonnegative integers.')
-    panel = config.random_search_evaluation_seeds
+    panel = config.mistp_evaluation_seeds
     if any(s >= 2**32 for s in panel):
         raise ValueError('Evaluation seeds must be below 2**32; optimizer seeds are above it.')
-    if len(etas) > 1 and set(panel) & set(config.evaluation_seeds):
-        raise ValueError('Eta-comparison seeds must be separate from the production panel.')
-    steps, points = config.random_search_steps, config.random_search_evaluation_steps
+    if len(alphas) > 1 and set(panel) & set(config.evaluation_seeds):
+        raise ValueError('Step-size pilot evaluation seeds must be separate from the production panel.')
+    steps, points = config.mistp_steps, config.mistp_evaluation_steps
     if type(steps) is not int or steps < 1:
-        raise ValueError('random_search_steps must be a positive integer.')
+        raise ValueError('mistp_steps must be a positive integer.')
     if (not points or any(type(k) is not int for k in points)
             or points != sorted(set(points)) or points[0] != 0 or points[-1] != steps):
-        raise ValueError('random_search_evaluation_steps must increase from 0 to random_search_steps.')
+        raise ValueError('mistp_evaluation_steps must increase from 0 to mistp_steps.')
 
 
 def fingerprints():
-    files = ('experiments/random_search.py', 'experiments/run.py',
-             'algorithms/random_search.py', 'models/objective.py', 'models/single_index.py',
+    files = ('experiments/mistp.py', 'experiments/run.py',
+             'algorithms/mistp.py', 'models/objective.py', 'models/single_index.py',
              'data/processed/training.npz', 'data/processed/validation.npz',
              'data/processed/metadata.json')
     return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files}
@@ -61,17 +61,17 @@ def prepare(folder=None):
     validate_settings()
     storage.check_data_settings()
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
-    name = ''.join(c if c.isalnum() or c in '-_' else '_' for c in config.random_search_experiment_name)
+    name = ''.join(c if c.isalnum() or c in '-_' else '_' for c in config.mistp_experiment_name)
     folder = Path(folder).resolve() if folder else ROOT / config.runs_directory / f'{stamp}_{name}'
     revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
     dirty = subprocess.run(['git', 'status', '--porcelain'], cwd=ROOT, capture_output=True, text=True)
     settings = {k: v for k, v in vars(config).items() if not k.startswith('_') and not callable(v)}
     saved = {'config': settings, 'sha256': fingerprints(), 'runtime': storage.runtime(),
              'git_commit': revision.stdout.strip(), 'git_dirty': bool(dirty.stdout), 'created_utc': stamp}
-    cases = len(config.random_search_etas) * len(config.random_search_run_seeds)
-    optimization = cases * config.random_search_steps * 2
-    evaluation = len(config.random_search_evaluation_seeds) * (
-        1 + cases * (len(config.random_search_evaluation_steps) - 1))
+    cases = len(config.mistp_alphas) * len(config.mistp_run_seeds)
+    optimization = cases * config.mistp_steps * 3
+    evaluation = len(config.mistp_evaluation_seeds) * (
+        1 + cases * (len(config.mistp_evaluation_steps) - 1))
     folder.mkdir(parents=True, exist_ok=False)
     storage.sync_directory(folder.parent)
     storage.save_json(folder / 'settings.json', saved)
@@ -81,8 +81,8 @@ def prepare(folder=None):
     return folder
 
 
-def run_folder(folder, eta, seed):
-    return folder / f'eta_{float(eta)}' / f'run_{seed}'
+def run_folder(folder, alpha, seed):
+    return folder / f'alpha_{float(alpha)}' / f'run_{seed}'
 
 
 def export_run(folder, history, completed, initial_completed):
@@ -90,26 +90,26 @@ def export_run(folder, history, completed, initial_completed):
     rows = []
     for row in history:
         k = row['state']['k']
-        if k not in config.random_search_evaluation_steps:
+        if k not in config.mistp_evaluation_steps:
             continue
         panel = initial_completed if k == 0 else completed
-        fits = [panel[f'eval:{k}:{seed}'] for seed in config.random_search_evaluation_seeds
+        fits = [panel[f'eval:{k}:{seed}'] for seed in config.mistp_evaluation_seeds
                 if f'eval:{k}:{seed}' in panel]
         if fits:
             rows.append({'k': k, 'evaluation_fits': len(fits),
-                         'panel_complete': len(fits) == len(config.random_search_evaluation_seeds),
+                         'panel_complete': len(fits) == len(config.mistp_evaluation_seeds),
                          'mean_mse': float(np.mean([fit['mse'] for fit in fits])),
                          'feasibility': row['metrics']['feasibility']})
     storage.write_csv(folder / 'evaluations.csv', rows)
 
 
 def export_summary(folder):
-    """Report completed panels; select eta only for a completed multi-eta comparison."""
+    """Report completed panels; select alpha only for a completed step-size comparison."""
     rows, final = [], []
-    for eta in config.random_search_etas:
+    for alpha in config.mistp_alphas:
         panels = {}
-        for seed in config.random_search_run_seeds:
-            path = run_folder(folder, eta, seed) / 'evaluations.csv'
+        for seed in config.mistp_run_seeds:
+            path = run_folder(folder, alpha, seed) / 'evaluations.csv'
             if path.exists():
                 with path.open() as file:
                     for row in csv.DictReader(file):
@@ -118,23 +118,23 @@ def export_summary(folder):
         for k, panel in sorted(panels.items()):
             values = np.array([float(r['mean_mse']) for r in panel])
             se = (0.0 if k == 0 else float(values.std(ddof=1) / np.sqrt(len(values)))) if len(values) > 1 else ''
-            row = {'eta': float(eta), 'k': k, 'runs': len(panel), 'mean_mse': float(values.mean()),
+            row = {'alpha': float(alpha), 'k': k, 'runs': len(panel), 'mean_mse': float(values.mean()),
                    'se_mse': se,
                    'mean_feasibility': float(np.mean([float(r['feasibility']) for r in panel]))}
             rows.append(row)
-            if k == config.random_search_steps and len(panel) == len(config.random_search_run_seeds):
+            if k == config.mistp_steps and len(panel) == len(config.mistp_run_seeds):
                 final.append(row)
     storage.write_csv(folder / 'summary.csv', rows)
-    complete = len(final) == len(config.random_search_etas)
-    compare_etas = len(config.random_search_etas) > 1
+    complete = len(final) == len(config.mistp_alphas)
+    compare_alphas = len(config.mistp_alphas) > 1
     storage.save_json(folder / 'selection.json', {
-        'mode': 'eta_comparison' if compare_etas else 'fixed_eta',
+        'mode': 'alpha_comparison' if compare_alphas else 'fixed_alpha',
         'complete': complete,
         'criterion': ('Mean final-checkpoint evaluation MSE across stochastic runs.'
-                      if compare_etas else 'Eta is fixed; reporting results do not select it.'),
-        'fixed_eta': None if compare_etas else float(config.random_search_etas[0]),
-        'eta_with_lowest_mean': (min(final, key=lambda row: row['mean_mse'])['eta']
-                                 if complete and compare_etas else None),
+                      if compare_alphas else 'Alpha is fixed; reporting results do not select it.'),
+        'fixed_alpha': None if compare_alphas else float(config.mistp_alphas[0]),
+        'alpha_with_lowest_mean': (min(final, key=lambda row: row['mean_mse'])['alpha']
+                                 if complete and compare_alphas else None),
         'final_results': final, 'note': 'Initial evaluation panel is shared once across all trajectories.'})
     costs = {role: {key: 0 for key in ('done', 'failed', 'interrupted', 'start')}
              for role in ('opt', 'eval')}
@@ -170,7 +170,7 @@ def execute(folder, stop_after=None):
             with np.load(ROOT / f'data/processed/{name}.npz', allow_pickle=False) as file:
                 data.append({key: file[key] for key in ('z', 'u', 'y')})
         stopping, steps_this_session = False, 0
-        status = {'state': 'running', 'pid': os.getpid(), 'eta': None, 'outer_seed': None, 'k': 0}
+        status = {'state': 'running', 'pid': os.getpid(), 'alpha': None, 'outer_seed': None, 'k': 0}
 
         def request_pause(signum, frame):
             nonlocal stopping
@@ -187,7 +187,7 @@ def execute(folder, stop_after=None):
             export_summary(folder)
             (folder / 'PAUSE').unlink(missing_ok=True)
             publish('paused')
-            print(f'Paused: eta={status["eta"]}, run={status["outer_seed"]}, step={status["k"]}', flush=True)
+            print(f'Paused: alpha={status["alpha"]}, run={status["outer_seed"]}, step={status["k"]}', flush=True)
 
         handlers = {s: signal.signal(s, request_pause) for s in (signal.SIGINT, signal.SIGTERM)}
         try:
@@ -197,57 +197,57 @@ def execute(folder, stop_after=None):
             initial_folder.mkdir(exist_ok=True)
             storage.sync_directory(folder)
             initial_fit, initial_completed = storage.fit_evaluator(initial_folder, *data)
-            for seed in config.random_search_evaluation_seeds:
+            for seed in config.mistp_evaluation_seeds:
                 if pause_requested():
                     pause()
                     return
                 initial_fit(f'eval:0:{seed}', initial['w'], seed)
 
-            for eta in config.random_search_etas:
-                for outer_seed in config.random_search_run_seeds:
-                    run = run_folder(folder, eta, outer_seed)
+            for alpha in config.mistp_alphas:
+                for outer_seed in config.mistp_run_seeds:
+                    run = run_folder(folder, alpha, outer_seed)
                     run.mkdir(parents=True, exist_ok=True)
                     storage.sync_directory(run.parent)
                     storage.sync_directory(folder)
                     history = storage.read_journal(run / 'history.jsonl')
                     if not history:
-                        record = {'state': initial, 'metrics': {'k': 0, 'eta': eta,
+                        record = {'state': initial, 'metrics': {'k': 0, 'alpha': alpha,
                                   'feasibility': abs(float(initial['w'] @ initial['w']) - 1)}}
                         storage.append(run / 'history.jsonl', record)
                         history = [record]
                     if ([r['state']['k'] for r in history] != list(range(len(history)))
-                            or history[-1]['state']['k'] > config.random_search_steps):
+                            or history[-1]['state']['k'] > config.mistp_steps):
                         raise ValueError('Non-contiguous iteration journal.')
                     state = dict(history[-1]['state'])
                     state['w'] = np.asarray(state['w'], dtype=np.float64)
                     fit, completed = storage.fit_evaluator(run, *data)
-                    status.update(eta=eta, outer_seed=outer_seed, k=state['k'])
+                    status.update(alpha=alpha, outer_seed=outer_seed, k=state['k'])
                     publish('running')
                     while True:
                         k = state['k']
-                        if k > 0 and k in config.random_search_evaluation_steps:
-                            for seed in config.random_search_evaluation_seeds:
+                        if k > 0 and k in config.mistp_evaluation_steps:
+                            for seed in config.mistp_evaluation_seeds:
                                 if pause_requested():
                                     break
                                 fit(f'eval:{k}:{seed}', state['w'], seed)
-                        if k in config.random_search_evaluation_steps or pause_requested():
+                        if k in config.mistp_evaluation_steps or pause_requested():
                             export_run(run, history, completed, initial_completed)
                             export_summary(folder)
                         if pause_requested() or (stop_after is not None and steps_this_session >= stop_after):
                             export_run(run, history, completed, initial_completed)
                             pause()
                             return
-                        if k == config.random_search_steps:
+                        if k == config.mistp_steps:
                             break
-                        sides = iter(('plus', 'minus'))
+                        candidates = iter(('current', 'plus', 'minus'))
 
                         def loss(w, seed):
-                            return fit(f'opt:{k}:{next(sides)}', w, seed)
+                            return fit(f'opt:{k}:{next(candidates)}', w, seed)
 
                         previous_w = state['w']
-                        state, trace = step(state, outer_seed, eta, loss)
-                        metrics = {'k': state['k'], 'eta': eta,
-                                   **{key: trace[key] for key in ('seed', 'L_plus', 'L_minus', 'selected')},
+                        state, trace = step(state, outer_seed, alpha, loss)
+                        metrics = {'k': state['k'], 'alpha': alpha,
+                                   **{key: trace[key] for key in ('seed', 'L_current', 'L_plus', 'L_minus', 'selected')},
                                    'update_norm': float(np.linalg.norm(state['w'] - previous_w)),
                                    'feasibility': abs(float(state['w'] @ state['w']) - 1)}
                         record = {'state': state, 'metrics': metrics}
@@ -256,8 +256,8 @@ def execute(folder, stop_after=None):
                         steps_this_session += 1
                         status['k'] = state['k']
                         publish('running')
-                        if state['k'] in config.random_search_evaluation_steps:
-                            print(f'eta={eta}, run={outer_seed}: {state["k"]}/{config.random_search_steps}', flush=True)
+                        if state['k'] in config.mistp_evaluation_steps:
+                            print(f'alpha={alpha}, run={outer_seed}: {state["k"]}/{config.mistp_steps}', flush=True)
             publish('completed')
             print(f'Completed: {folder}', flush=True)
         except Exception as error:
@@ -294,7 +294,7 @@ def main():
     folder = args.resume.resolve() if args.resume else prepare(args.output)
     print(f'Results: {folder}', flush=True)
     if args.background:
-        command = [sys.executable, '-u', '-m', 'experiments.random_search', '--resume', str(folder)]
+        command = [sys.executable, '-u', '-m', 'experiments.mistp', '--resume', str(folder)]
         if args.stop_after is not None:
             command += ['--stop-after', str(args.stop_after)]
         with (folder / 'run.log').open('a') as log:

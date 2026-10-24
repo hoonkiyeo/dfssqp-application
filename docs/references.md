@@ -4,12 +4,22 @@
   Equality-Constrained Stochastic Optimization](https://arxiv.org/abs/2510.22458v1).
   arXiv:2510.22458. The DF-SSQP algorithm used in this application.
 
+- **Boucherouite, S., Malinovsky, G., Richtarik, P., and Bergou, E. H. (2024).**
+  [Minibatch Stochastic Three Points Method for Unconstrained Smooth
+  Minimization](https://doi.org/10.1609/aaai.v38i18.30016).
+  *Proceedings of the AAAI Conference on Artificial Intelligence*, 38(18), 20344–20352.
+  [Algorithm 1 and experiments](https://ojs.aaai.org/index.php/AAAI/article/view/30016/31786).
+  Source for MiSTP: compare current/positive/negative candidates using the same
+  stochastic sample and retain the lowest loss. We use one training seed per
+  iteration, uniform unit directions, and add projection of the selected point
+  onto the unit sphere. Exact ties prefer current, then positive, then negative.
+  Our step-size grid uses the first three values of the authors' powers-of-ten search.
+
 - **Chayti, E. M., El Bakkali El Kadi, T., Saadi, O., and Jaggi, M. (2025).**
   [Stochastic Optimization with Random Search](https://arxiv.org/abs/2510.15610v2).
-  arXiv:2510.15610, v2. Source for the stochastic random-search iteration
-  (Algorithm 1 and Section 4, with one shared stochastic sample for the two candidates).
-  Our application adds normalization of the selected candidate to enforce unit norm;
-  exact loss ties select the positive candidate.
+  arXiv:2510.15610, v2. Source for the earlier two-candidate experiments;
+  this implementation has been replaced by MiSTP. Earlier results retain their
+  original method and settings.
 
 - **Li, J., Balasubramanian, K., and Ma, S. (2023).**
   [Stochastic Zeroth-Order Riemannian Derivative Estimation and
