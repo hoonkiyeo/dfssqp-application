@@ -1,7 +1,7 @@
 """Stochastic random search: Chayti et al. (2025), Algorithm 1 and Section 4.
 
 https://arxiv.org/abs/2510.15610v2
-One shared training seed for two raw probes. Application choices: normalize the
+One shared training seed for two probes. Application choices: normalize the
 selected candidate to enforce unit norm, and choose the positive candidate on ties.
 """
 
@@ -11,7 +11,7 @@ import config
 
 
 def initialize():
-    """The same fixed unit-norm starting direction as DF-SSQP."""
+    """The same fixed unit-norm initial direction as DF-SSQP."""
     v = np.random.default_rng(config.initialization_seed).normal(size=config.dimension)
     return {"k": 0, "w": v / np.linalg.norm(v)}
 
