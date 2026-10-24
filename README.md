@@ -16,7 +16,7 @@ and supports background execution and resumption.
 | `data/` | Data preparation; source inputs in `raw/`, prepared arrays in `processed/` |
 | `models/` | Single-index model and fixed-direction training/loss evaluation |
 | `algorithms/` | Optimization methods, with each complete iteration visible in its file |
-| `experiments/` | Run DF-SSQP and stochastic random search, save evaluations and plot results |
+| `experiments/` | Experiment runners, saved evaluations and plots |
 | `tests/` | Checks for implemented calculations and reproducibility |
 | `docs/` | Formulation, user-managed notes and [references](docs/references.md) |
 | `runs/` | Local experiment settings, results and checkpoints |
@@ -289,3 +289,31 @@ checkpoints. Feasibility uses a logarithmic axis when positive values exist; zer
 values and nonpositive band bounds are omitted without an artificial floor. A single
 run is drawn without an SE band. Actual available run counts and these display
 conventions are saved in `figures/notes.txt`; partial results are explicitly identified.
+
+
+## ZO-RSGD baseline
+
+`algorithms/zo_rsgd.py` implements Li, Balasubramanian and Ma, Algorithm 2,
+with one Gaussian tangent sample and the unit-sphere normalization retraction.
+The current point and one retracted forward probe share a training seed.
+There is no gradient moving average.
+
+Edit the `zo_rsgd_*` settings in `config.py`. The initial settings use 5,000
+iterations and ten runs, constant `eta = 1/sqrt(5000)` and `mu = 0.01`.
+These numerical choices are application baselines, not paper-prescribed values.
+The initial point, outer/training seed map and independent reporting panel
+match DF-SSQP. Each iteration costs two fits. Including reporting, the planned
+budget is 103,620 fits (100,000 optimization + 3,620 reporting).
+
+```bash
+python -m experiments.zo_rsgd --background
+python -m experiments.zo_rsgd --status runs/<experiment>
+python -m experiments.zo_rsgd --pause runs/<experiment>
+python -m experiments.zo_rsgd --resume runs/<experiment> --background
+```
+
+The runner saves settings, source/data fingerprints, fit costs, histories,
+reporting means and SE across runs. Resume restores the saved horizon and
+constant step size; it reuses completed fits after an interruption.
+The plotting script currently handles DF-SSQP results; ZO-RSGD reporting curves
+are saved in its experiment's `summary.csv`.

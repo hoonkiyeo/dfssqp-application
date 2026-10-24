@@ -103,3 +103,14 @@ random_search_run_seeds = list(range(86_100_901, 86_100_911))
 random_search_evaluation_seeds = list(evaluation_seeds)
 random_search_evaluation_steps = list(evaluation_steps)
 random_search_experiment_name = "random_search_eta_0p1_main"
+
+
+# ZO-RSGD: constant eta = coefficient/sqrt(N), one sample per iteration.
+zo_rsgd_step_coefficient = 1.0
+zo_rsgd_mu = 0.01
+zo_rsgd_m = 1
+zo_rsgd_steps = 5_000
+zo_rsgd_run_seeds = list(outer_seeds)
+zo_rsgd_evaluation_seeds = list(evaluation_seeds)
+zo_rsgd_evaluation_steps = list(evaluation_steps)
+zo_rsgd_experiment_name = "zo_rsgd_baseline"
