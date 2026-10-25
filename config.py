@@ -1,6 +1,6 @@
 """Application settings. Edit the values here before running an experiment.
 
-Starting point: the agreed October 9 baseline, with iota1 = 1.
+Fixed main-comparison settings selected after the step-scale pilot.
 This file only defines settings; importing it does not train or run anything.
 """
 
@@ -25,7 +25,7 @@ test_months = ("2015-03", "2026-07")  # Reserved; not used for development.
 # alpha_k = iota1 / (k + 1)**p1       step schedule
 # beta_k  = iota2 / (k + 1)**p2       averaging schedule
 # b_k     = iota3 / (k + 1)**p3       probe schedule
-iota1 = 1.0
+iota1 = 10.0
 iota2 = 1.0
 iota3 = 1.0 / sqrt(dimension)
 p1 = 0.751
@@ -79,29 +79,30 @@ torch_threads = 1
 # AI uses the exact constraint Jacobian; ZI estimates it.
 modes = ("AI", "ZI")
 sqp_steps = 5_000
-outer_seeds = list(range(56_100_901, 56_100_911))
+outer_seeds = list(range(67_102_501, 67_102_511))
 # Each outer seed determines that run's perturbations and training seeds.
 # Both sides of a probe pair use the same training seed with fresh models.
 
 # Independent evaluation panel: these seeds do not select or update w.
-evaluation_seeds = list(range(46_100_901, 46_100_921))
+evaluation_seeds = list(range(48_102_501, 48_102_521))
 evaluation_steps = [
     0, 1, 2, 5, 10, 20, 50, 100, 200, 500,
     1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000,
 ]
 baselines = ("aggregate_only", "mean", "pca")
-experiment_name = "baseline"
+experiment_name = "main_comparison"
 runs_directory = "runs"
 
 
 # MiSTP: current/+/- selection, one shared training seed, then unit-sphere projection.
-# Standalone MiSTP defaults; the shared pilot below supplies its frozen protocol.
-mistp_alphas = (1.0, 0.1, 0.01)
-mistp_steps = None
-mistp_run_seeds = []
-mistp_evaluation_seeds = []  # Pilot reporting panel must be separate from evaluation_seeds.
-mistp_evaluation_steps = []
-mistp_experiment_name = "mistp_step_pilot"
+# Main settings; the pilot preparer below restores its separate frozen grid.
+mistp_alphas = (0.01,)
+mistp_steps = sqp_steps
+mistp_run_seeds = list(outer_seeds)
+mistp_evaluation_seeds = list(evaluation_seeds)
+# 3,333 steps: primary equal-budget endpoint; 5,000: secondary equal-step endpoint.
+mistp_evaluation_steps = sorted(set(evaluation_steps + [3_333]))
+mistp_experiment_name = "mistp_main"
 
 
 # ZO-RSGD: constant eta = coefficient/sqrt(N), one sample per iteration.
@@ -112,7 +113,7 @@ zo_rsgd_steps = 5_000
 zo_rsgd_run_seeds = list(outer_seeds)
 zo_rsgd_evaluation_seeds = list(evaluation_seeds)
 zo_rsgd_evaluation_steps = list(evaluation_steps)
-zo_rsgd_experiment_name = "zo_rsgd_baseline"
+zo_rsgd_experiment_name = "zo_rsgd_main"
 
 
 # Step-scale pilot: preparation only via `python -m experiments.pilot`.

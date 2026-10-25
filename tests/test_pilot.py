@@ -24,6 +24,8 @@ def prepared_context(monkeypatch, tmp_path):
     for key, value in public_config().items():
         monkeypatch.setattr(config, key, copy.deepcopy(value))
     settings = {
+        'outer_seeds': list(range(56_100_901, 56_100_911)),
+        'evaluation_seeds': list(range(46_100_901, 46_100_921)),
         'pilot_steps': 5000,
         'pilot_run_seeds': [66_102_401, 66_102_402, 66_102_403],
         'pilot_evaluation_seeds': list(range(47_102_401, 47_102_421)),

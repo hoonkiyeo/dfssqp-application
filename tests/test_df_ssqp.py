@@ -9,7 +9,9 @@ import config
 from algorithms.df_ssqp import initialize, step
 
 
-def test_ai_matches_closed_form_and_unprojected_update():
+@pytest.mark.parametrize('coefficient', [1.0, 10.0])
+def test_ai_matches_closed_form_and_unprojected_update(monkeypatch, coefficient):
+    monkeypatch.setattr(config, 'iota1', coefficient)
     # Linear f and w=e1: the AI direction removes g_hat's first coordinate.
     state = initialize()
     state.update(w=np.array([1., 0.]), lam=np.zeros(1), g_bar=np.zeros(2), G_bar=np.zeros((1, 2)))
@@ -26,8 +28,8 @@ def test_ai_matches_closed_form_and_unprojected_update():
     np.testing.assert_allclose(t['eta'], [-g[0]/2], rtol=1e-14, atol=1e-15)
     assert t['tau'] == 1
     assert t['nu'] == pytest.approx(.45)
-    assert t['s'] == pytest.approx(.15)
-    np.testing.assert_allclose(nxt['w'], state['w'] + .15*t['d'])
+    assert t['s'] == pytest.approx(.15 * coefficient)
+    np.testing.assert_allclose(nxt['w'], state['w'] + .15 * coefficient * t['d'])
     assert np.linalg.norm(nxt['w']) > 1  # No projection after the update.
     assert len(calls) == 2 and calls[0][1] == calls[1][1]
     np.testing.assert_array_equal(calls[0][0], state['w'] + t['b']*t['delta'])
