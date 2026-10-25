@@ -1,7 +1,5 @@
-"""One fresh fit at fixed w and seed -> validation MSE L(w, seed).
-
-Adam: Kingma and Ba (2014), https://arxiv.org/abs/1412.6980.
-The finite training budget and train-only scaling are this application's settings.
+"""
+One fresh fit at fixed w and seed -> validation MSE L(w, seed).
 """
 
 import hashlib
@@ -15,12 +13,14 @@ from models.single_index import SingleIndexModel
 
 
 def evaluate(w, seed, training, validation, *, details=False):
-    """Use z/u/y dictionaries. Return MSE, or fit details when explicitly requested.
+    """
+    Use z/u/y dictionaries. Return MSE, or fit details when explicitly requested.
 
     Each call starts a fresh model and optimizer. No normalization/projection of w.
     Returned predictions/MSE use original response units; parameters use training's
     standardized coordinates. The caller sets Torch threads once before repeated fits.
     """
+    
     w = np.asarray(w, dtype=np.float64)
     if w.ndim != 1 or not np.isfinite(w).all():
         raise ValueError("w must be a finite vector.")

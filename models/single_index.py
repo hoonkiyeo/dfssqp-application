@@ -1,4 +1,6 @@
-"""Partially linear model: beta*u + F_theta(index), with a 1-h-1 neural link."""
+"""
+Partially linear model: beta*u + F_theta(index), with a 1-h-1 neural link.
+"""
 
 from math import sqrt
 
@@ -10,7 +12,9 @@ import config
 
 
 class SingleIndexModel(nn.Module):
-    """Train beta and theta at fixed w; inputs are standardized index and control."""
+    """
+    Train beta and theta at fixed w; inputs are standardized index and control.
+    """
 
     def __init__(self, initialization_seed):
         super().__init__()

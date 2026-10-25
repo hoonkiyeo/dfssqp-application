@@ -1,5 +1,5 @@
-"""Existing fixed comparisons; all directions/coefficients use training data only.
-
+"""
+Existing fixed comparisons; all directions/coefficients use training data only.
 Mean/PCA are industry-summary controls (application background: He et al., 2023,
 doi:10.1016/j.ribaf.2023.101983). Our neural link/training are application choices.
 Pass either fixed direction to models.objective.evaluate for the unchanged fit.
@@ -7,9 +7,10 @@ Pass either fixed direction to models.objective.evaluate for the unchanged fit.
 
 import numpy as np
 
-
 def fixed_directions(training):
-    """Equal weights and the first principal direction, both with unit norm."""
+    """
+    Equal weights and the first principal direction, both with unit norm.
+    """    
     z = np.asarray(training['z'], dtype=np.float64)
     if z.ndim != 2 or min(z.shape) < 1 or len(z) < 2 or not np.isfinite(z).all():
         raise ValueError('PCA needs a finite training matrix with at least two rows.')
@@ -26,7 +27,9 @@ def fixed_directions(training):
 
 
 def aggregate_only(training, validation):
-    """Fit y = a + beta*u by OLS. Return predictions/MSE in original units."""
+    """
+    Fit y = a + beta*u by OLS. Return predictions/MSE in original units.
+    """
     tu, ty = (np.asarray(training[key], dtype=np.float64) for key in ('u', 'y'))
     vu, vy = (np.asarray(validation[key], dtype=np.float64) for key in ('u', 'y'))
     for u, y in ((tu, ty), (vu, vy)):
