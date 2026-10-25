@@ -373,3 +373,118 @@ def test_existing_runners_execute_frozen_coefficients_and_resume_identically(pre
                 assert first_metrics['eta'] == pytest.approx(entry['coefficient'] / np.sqrt(3))
             else:
                 assert first_metrics['alpha'] in entry['coefficients']
+
+
+def test_additional_pilot_freezes_only_new_candidates_and_method_specific_budget(prepared_context):
+    before = public_config()
+    folder = pilot.prepare_additional(prepared_context / 'additional')
+    assert public_config() == before
+    entries = campaigns(folder)
+    assert len(entries) == 3
+    expected_coefficients = {'DF-SSQP': [20.], 'ZO-RSGD': [10.], 'MiSTP': [.001]}
+    expected_budgets = {'DF-SSQP': (60000, 840), 'ZO-RSGD': (30000, 380),
+                        'MiSTP': (45000, 440)}
+    for entry in entries:
+        method = entry['method']
+        assert entry['coefficients'] == expected_coefficients[method]
+        child = read_json(folder / entry['folder'] / 'settings.json')['config']
+        if method == 'DF-SSQP':
+            keys = ('outer_seeds', 'evaluation_seeds', 'evaluation_steps')
+            assert child['iota1'] == 20.
+            assert child['modes'] == ['AI', 'ZI']
+        elif method == 'ZO-RSGD':
+            keys = ('zo_rsgd_run_seeds', 'zo_rsgd_evaluation_seeds', 'zo_rsgd_evaluation_steps')
+            saved = read_json(folder / entry['folder'] / 'settings.json')
+            assert saved['parameters']['eta'] == pytest.approx(10. / np.sqrt(5000))
+            assert saved['parameters']['mu'] == .01
+            assert saved['parameters']['m'] == 1
+        else:
+            keys = ('mistp_run_seeds', 'mistp_evaluation_seeds', 'mistp_evaluation_steps')
+            assert child['mistp_steps'] == 5000
+            assert child['mistp_alphas'] == [.001]
+        assert child[keys[0]] == before['pilot_run_seeds']
+        assert child[keys[1]] == before['pilot_evaluation_seeds']
+        expected_points = [0, 100, 500, 1000, 2000, 3500, 5000]
+        if method == 'MiSTP':
+            expected_points = [0, 100, 500, 1000, 2000, 3333, 3500, 5000]
+        assert child[keys[2]] == expected_points
+        assert child['initialization_seed'] == before['initialization_seed']
+        for key in ('training_steps', 'learning_rate', 'batch_size', 'iota2', 'iota3',
+                    'p1', 'p2', 'p3'):
+            assert child[key] == before[key]
+        opt, report_fits = expected_budgets[method]
+        assert entry['budget'] == {'optimization_fits': opt,
+                                   'evaluation_fits': report_fits,
+                                   'total_fits': opt + report_fits}
+    assert read_json(folder / 'budget.json') == {
+        'optimization_fits': 135000, 'evaluation_fits': 1660, 'total_fits': 136660}
+    assert not list(folder.rglob('fits.jsonl'))
+    assert not list(folder.rglob('history.jsonl'))
+
+
+def test_additional_report_accepts_mistp_equal_budget_checkpoint_without_early_selection(
+        prepared_context, monkeypatch):
+    folder = pilot.prepare_additional(prepared_context / 'additional_reporting')
+    missing_seed = config.pilot_run_seeds[-1]
+    fake_panels(folder, missing=('MiSTP', .001, missing_seed))
+    mistp_entry = next(entry for entry in campaigns(folder) if entry['method'] == 'MiSTP')
+    missing_run = None
+    for index, seed in enumerate(config.pilot_run_seeds):
+        run = folder / mistp_entry['folder'] / f'alpha_{float(.001)}' / f'run_{seed}'
+        run.mkdir(parents=True, exist_ok=True)
+        path = run / 'evaluations.csv'
+        rows = []
+        if path.exists():
+            with path.open() as file:
+                rows = list(csv.DictReader(file))
+        rows.insert(0, {'k': 3333, 'evaluation_fits': 20, 'panel_complete': True,
+                        'mean_mse': 4. + index, 'feasibility': 1e-16})
+        with path.open('w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        if seed == missing_seed:
+            missing_run = path
+    # Reporting must use the saved child checkpoints, not changed live settings.
+    monkeypatch.setattr(config, 'pilot_mistp_evaluation_steps', [0, 5000])
+    before = public_config()
+    selection = pilot.report(folder)
+    assert public_config() == before
+    assert not selection['complete']
+    assert not selection['methods']['MiSTP']['complete']
+    assert selection['methods']['MiSTP']['provisional_coefficient'] is None
+    intermediate = next(row for row in read_summary(folder)
+                        if row['method'] == 'MiSTP' and int(row['k']) == 3333)
+    assert int(intermediate['runs']) == 3
+    assert float(intermediate['mean_mse']) == pytest.approx(5.)
+    assert float(intermediate['se_mse']) == pytest.approx(1. / np.sqrt(3))
+    final = next(row for row in read_summary(folder)
+                 if row['method'] == 'MiSTP' and int(row['k']) == 5000)
+    assert int(final['runs']) == 2
+    assert all(value['complete'] for method, value in selection['methods'].items()
+               if method != 'MiSTP')
+    with missing_run.open('a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=('k', 'evaluation_fits', 'panel_complete',
+                                                 'mean_mse', 'feasibility'))
+        writer.writerow({'k': 5000, 'evaluation_fits': 20, 'panel_complete': True,
+                          'mean_mse': 9., 'feasibility': 1e-16})
+    complete = pilot.report(folder)
+    assert complete['complete']
+    assert complete['methods']['MiSTP']['provisional_coefficient'] == .001
+
+
+@pytest.mark.parametrize('points', [
+    [0, 3333],
+    [0, 3333, 3333, 5000],
+    [0, 5000, 3333],
+    [0, 3333., 5000],
+])
+def test_invalid_method_specific_mistp_points_fail_before_preparation(
+        prepared_context, monkeypatch, points):
+    monkeypatch.setattr(config, 'pilot_mistp_evaluation_steps', points)
+    before = public_config()
+    folder = prepared_context / 'invalid_mistp_points'
+    with pytest.raises(ValueError, match='[Mm]i[Ss][Tt][Pp]|mistp'):
+        pilot.prepare(folder)
+    assert not folder.exists()
+    assert public_config() == before

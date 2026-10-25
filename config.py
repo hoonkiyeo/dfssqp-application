@@ -128,3 +128,11 @@ pilot_mistp_alphas = (1.0, 0.1, 0.01)
 pilot_experiment_name = "step_scale_pilot"
 # Pilot reporting selects coefficients after the pilot, never its iterates.
 # This panel is separate from the existing main panel `evaluation_seeds`.
+
+# Additional pilot: reuse completed candidates; prepare only the new step scales.
+pilot_mistp_evaluation_steps = None  # Defaults to the shared pilot checkpoints.
+additional_pilot_df_iota1s = (20.0,)
+additional_pilot_zo_coefficients = (10.0,)
+additional_pilot_mistp_alphas = (0.001,)
+additional_pilot_mistp_evaluation_steps = [0, 100, 500, 1000, 2000, 3333, 3500, 5000]
+additional_pilot_experiment_name = "step_scale_additional_pilot"

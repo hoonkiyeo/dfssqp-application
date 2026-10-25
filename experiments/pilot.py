@@ -2,6 +2,7 @@
 
 python -m experiments.pilot --output runs/<pilot>
 python -m experiments.pilot --report runs/<pilot>
+python -m experiments.pilot --additional --output runs/<additional_pilot>
 
 Each saved child campaign uses an existing runner; its command is recorded,
 never executed here. Reporting reads the frozen protocol and completed panels.
@@ -82,6 +83,12 @@ def validate_settings():
     if (not points or any(type(k) is not int for k in points)
             or points != sorted(set(points)) or points[0] != 0 or points[-1] != config.pilot_steps):
         raise ValueError('pilot_evaluation_steps must increase from 0 to pilot_steps.')
+    mistp_points = config.pilot_mistp_evaluation_steps
+    if mistp_points is not None and (
+            not mistp_points or any(type(k) is not int for k in mistp_points)
+            or mistp_points != sorted(set(mistp_points))
+            or mistp_points[0] != 0 or mistp_points[-1] != config.pilot_steps):
+        raise ValueError('MiSTP evaluation steps must increase from 0 to pilot_steps.')
     for name in ('pilot_df_iota1s', 'pilot_zo_coefficients', 'pilot_mistp_alphas'):
         values = getattr(config, name)
         if not values or len(set(values)) != len(values) or any(not np.isfinite(v) or v <= 0 for v in values):
@@ -89,7 +96,7 @@ def validate_settings():
 
 
 def prepare(folder=None):
-    """Freeze seven child campaigns and exact budgets; do not evaluate any loss."""
+    """Freeze child campaigns and exact budgets; do not evaluate any loss."""
     validate_settings()
     df_runner.check_data_settings()
     frozen = public_config()
@@ -138,7 +145,10 @@ def prepare(folder=None):
                       'experiments.mistp', mistp_runner, {
                           'mistp_alphas': frozen['pilot_mistp_alphas'], 'mistp_steps': steps,
                           'mistp_run_seeds': seeds, 'mistp_evaluation_seeds': panel,
-                          'mistp_evaluation_steps': points, 'mistp_experiment_name': 'mistp'})
+                          'mistp_evaluation_steps': (frozen['pilot_mistp_evaluation_steps']
+                                                     if frozen['pilot_mistp_evaluation_steps'] is not None
+                                                     else points),
+                          'mistp_experiment_name': 'mistp'})
         budget = {key: sum(c['budget'][key] for c in campaigns)
                   for key in ('optimization_fits', 'evaluation_fits', 'total_fits')}
         revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
@@ -158,12 +168,22 @@ def prepare(folder=None):
     return folder
 
 
+def prepare_additional(folder=None):
+    """Reuse the pilot protocol while preparing only its additional candidates."""
+    with settings(pilot_df_iota1s=config.additional_pilot_df_iota1s,
+                  pilot_zo_coefficients=config.additional_pilot_zo_coefficients,
+                  pilot_mistp_alphas=config.additional_pilot_mistp_alphas,
+                  pilot_mistp_evaluation_steps=config.additional_pilot_mistp_evaluation_steps,
+                  pilot_experiment_name=config.additional_pilot_experiment_name):
+        return prepare(folder)
+
+
 def report(folder):
     """Aggregate complete seed panels; coefficient choices remain provisional."""
     folder = Path(folder).resolve()
     protocol = json.loads((folder / 'protocol.json').read_text())
     frozen = protocol['config']
-    seeds, points = frozen['pilot_run_seeds'], frozen['pilot_evaluation_steps']
+    seeds = frozen['pilot_run_seeds']
     panel_size, final_step = len(frozen['pilot_evaluation_seeds']), frozen['pilot_steps']
     rows, expected = [], {}
     for campaign in protocol['campaigns']:
@@ -171,6 +191,9 @@ def report(folder):
         digest = hashlib.sha256((child / 'settings.json').read_bytes()).hexdigest()
         if digest != campaign['settings_sha256']:
             raise ValueError(f'Frozen child settings changed: {campaign["name"]}')
+        points = (frozen.get('pilot_mistp_evaluation_steps')
+                  if campaign['method'] == 'MiSTP' else None)
+        points = points if points is not None else frozen['pilot_evaluation_steps']
         variants = ('AI', 'ZI') if campaign['method'] == 'DF-SSQP' else (None,)
         for variant in variants:
             method = f'DF-SSQP {variant}' if variant else campaign['method']
@@ -239,12 +262,15 @@ def main():
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--output', type=Path)
     action.add_argument('--report', type=Path)
+    parser.add_argument('--additional', action='store_true')
     args = parser.parse_args()
+    if args.additional and args.report:
+        parser.error('--additional prepares a new pilot; it cannot be used with --report.')
     if args.report:
         selection = report(args.report)
         print(f'Report saved: {args.report.resolve()} (complete={selection["complete"]})')
     else:
-        folder = prepare(args.output)
+        folder = prepare_additional(args.output) if args.additional else prepare(args.output)
         print(f'Prepared only; no training started: {folder}')
         print(f'Child launch commands are recorded in {folder / "protocol.json"}.')
 
