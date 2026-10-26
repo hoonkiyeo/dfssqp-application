@@ -111,7 +111,7 @@ def step(state, outer_seed, mode, loss):
     reduction = -tau * (g_dot_d + 0.5 * d_squared) + c_norm
     lower_reduction = 0.5 * tau * d_squared + config.sigma * c_norm
     tolerance = 128.0 * np.finfo(float).eps * max(1.0, abs(reduction), abs(lower_reduction))
-    if zero and checks["zero_denominator"]:
+    if checks["zero_denominator"]:
         tolerance += tau * checks["denominator_error_bound"]
     if (not np.isfinite([tau, reduction, tolerance]).all() or tau <= 0
             or (reduction <= 0 and not zero) or reduction - lower_reduction < -tolerance):

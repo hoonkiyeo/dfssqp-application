@@ -116,3 +116,44 @@ def test_rejects_nonfinite_loss_and_bad_solve_without_advancing(monkeypatch):
     with pytest.raises(FloatingPointError, match='predicted reduction'):
         step(state, config.outer_seeds[0], 'AI', lambda w, seed: float(w[0]))
     assert state['k'] == 0
+
+
+def test_nonzero_zi_step_accepts_certified_merit_denominator_cancellation(monkeypatch):
+    # Cached scalar losses reproduce the two first iterations of a 48-D run.
+    # No training data, model fit or saved run directory is required.
+    settings = {
+        'dimension': 48, 'initialization_seed': 16_100_901,
+        'lambda_initial': 0., 'gradient_average_initial': 0.,
+        'jacobian_average_initial': 0., 'tau_initial': 1., 'nu_initial': 1.,
+        'iota1': 10., 'iota2': 1., 'iota3': 1 / np.sqrt(48),
+        'p1': .751, 'p2': .501, 'p3': .25,
+        'sigma': .1, 'epsilon': .1, 'L_f': 1., 'L_c': 2.,
+        'jacobian_lower': 1e-3, 'jacobian_upper': 1e3, 'psi': 0.,
+    }
+    for name, value in settings.items():
+        monkeypatch.setattr(config, name, value)
+    losses = iter([0.5294513397919928, 0.5063750454971566,
+                   0.4933157705636887, 0.518506854081342])
+    calls = []
+
+    def cached_loss(w, seed):
+        calls.append(seed)
+        return next(losses)
+
+    initial = initialize()
+    first, t1 = step(initial, 67_102_506, 'ZI', cached_loss)
+    assert first['k'] == 1 and t1['roundoff']['zero_step']
+    assert first['tau'] == first['nu'] == 1.
+    assert np.isinf(t1['nu_trial'])
+
+    second, t2 = step(first, 67_102_506, 'ZI', cached_loss)
+    assert second['k'] == 2 and not t2['roundoff']['zero_step']
+    assert t2['roundoff']['solve_stable'] and t2['roundoff']['zero_denominator']
+    bound = t2['roundoff']['denominator_error_bound']
+    assert abs(t2['tau_denominator']) <= bound
+    assert np.isinf(t2['tau_trial']) and second['tau'] == 1.
+    assert t2['d_squared'] > 0 and t2['reduction'] > 0
+    assert t2['reduction'] == pytest.approx(.5 * t2['d_squared'], rel=0, abs=bound)
+    assert second['nu'] == pytest.approx(.45, rel=1e-9)
+    assert np.isfinite(second['w']).all() and np.isfinite(second['lam']).all()
+    assert calls == [2_890_607_581_307_310_362] * 2 + [880_440_260_934_065_307] * 2
