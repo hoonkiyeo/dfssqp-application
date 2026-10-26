@@ -39,7 +39,7 @@ def step(state, outer_seed, eta, mu, loss):
 
     # Step1. Draw a Gaussian vector and project it onto the tangent space
     v = rng.normal(size=len(w))
-    u = v - (w @ v) * w
+    u = v - (w @ v) * w # u is an orthogonal vector to w
 
     # Step2. Retract (project) the probe and evaluate both points with the same seed.
     w_probe = w + mu * u

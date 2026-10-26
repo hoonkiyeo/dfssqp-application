@@ -25,6 +25,7 @@ def step(state, outer_seed, alpha, loss):
     One projected MiSTP iteration -> (next_state, trace).
     """
 
+    # Read the current iteration and direction and check that the step size is finite and positive. 
     k, w = state["k"], np.asarray(state["w"], dtype=np.float64)
     if not np.isfinite(alpha) or alpha <= 0:
         raise ValueError("alpha must be finite and positive.")
